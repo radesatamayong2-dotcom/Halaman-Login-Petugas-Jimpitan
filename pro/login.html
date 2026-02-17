@@ -68,9 +68,15 @@ function hitungMingguBerjalan(){
   return Math.floor(selisih / (1000*60*60*24*7));
 }
 
+let authChecked = false;
+
 onAuthStateChanged(auth, (user)=>{
-  if(!user){
-    window.location.href = "login.html";
+  if(!authChecked){
+    authChecked = true;
+
+    if(!user){
+      window.location.replace("login.html");
+    }
   }
 });
 
