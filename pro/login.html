@@ -1,53 +1,163 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Login Petugas RT02</title>
+  <title>Dashboard RT02</title>
   <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial; background:#f4f6f9; margin:0; padding:20px;}
+    .card { background:white; padding:20px; margin-bottom:20px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);}
+    h2 { margin-top:0; }
+    button { padding:10px 20px; background:#1976d2; color:white; border:none; border-radius:5px; cursor:pointer;}
+    input, select { padding:8px; width:100%; margin-bottom:10px;}
+    table { width:100%; border-collapse: collapse;}
+    th, td { padding:8px; border-bottom:1px solid #ddd;}
+    .lunas { color:green; font-weight:bold;}
+    .kurang { color:red; font-weight:bold;}
+    .lebih { color:blue; font-weight:bold;}
+  </style>
 </head>
 <body>
 
-  <h2>Login Petugas</h2>
+  <div class="card">
+    <h2>Input Setoran</h2>
+    <select id="wargaSelect"></select>
+    <input type="number" id="jumlahInput" placeholder="Jumlah (Rp)">
+    <button id="simpanBtn">Simpan</button>
+    <p id="preview"></p>
+  </div>
 
-  <input type="text" id="username" placeholder="Username">
-  <br><br>
-  <input type="password" id="password" placeholder="Password">
-  <br><br>
-  <button id="loginBtn">Login</button>
+  <div class="card">
+    <h2>Status Warga</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Nama</th>
+          <th>Total Bayar</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="tabelWarga"></tbody>
+    </table>
+  </div>
 
-  <p id="error" style="color:red;"></p>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+import { getDatabase, ref, push, onValue, set } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyAZIVBo5z2Vz7Vp8i8-ZZTkAhdsKrU5e9Q",
+  authDomain: "iuran-warga-rt-02-rw-03-c14fa.firebaseapp.com",
+  databaseURL: "https://iuran-warga-rt-02-rw-03-c14fa-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "iuran-warga-rt-02-rw-03-c14fa",
+  storageBucket: "iuran-warga-rt-02-rw-03-c14fa.firebasestorage.app",
+  messagingSenderId: "717148916230",
+  appId: "1:717148916230:web:22981ac3c7df301d4e5187"
+};
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAZIVBo5z2Vz7Vp8i8-ZZTkAhdsKrU5e9Q",
-      authDomain: "iuran-warga-rt-02-rw-03-c14fa.firebaseapp.com",
-      databaseURL: "https://iuran-warga-rt-02-rw-03-c14fa-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "iuran-warga-rt-02-rw-03-c14fa",
-      storageBucket: "iuran-warga-rt-02-rw-03-c14fa.firebasestorage.app",
-      messagingSenderId: "717148916230",
-      appId: "1:717148916230:web:22981ac3c7df301d4e5187"
-    };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+const IURAN_PER_MINGGU = 5000;
+const TANGGAL_MULAI = new Date("2026-02-01");
 
-    document.getElementById("loginBtn").addEventListener("click", () => {
-      const username = document.getElementById("username").value;
-      const password = document.getElementById("password").value;
+function hitungMingguBerjalan(){
+  const sekarang = new Date();
+  const selisih = sekarang - TANGGAL_MULAI;
+  return Math.floor(selisih / (1000*60*60*24*7));
+}
 
-      const email = username + "@rt02.local";
+onAuthStateChanged(auth, (user)=>{
+  if(!user){
+    window.location.href = "login.html";
+  }
+});
 
-      signInWithEmailAndPassword(auth, email, password)
-        .then(() => {
-          window.location.href = "dashboard.html";
-        })
-        .catch(() => {
-          document.getElementById("error").innerText = "Login gagal!";
-        });
-    });
-  </script>
+const wargaRef = ref(db, "warga");
+const transaksiRef = ref(db, "transaksi");
+
+let dataWarga = {};
+let dataTransaksi = {};
+
+onValue(wargaRef, snapshot=>{
+  dataWarga = snapshot.val() || {};
+  renderDropdown();
+  renderTabel();
+});
+
+onValue(transaksiRef, snapshot=>{
+  dataTransaksi = snapshot.val() || {};
+  renderTabel();
+});
+
+function renderDropdown(){
+  const select = document.getElementById("wargaSelect");
+  select.innerHTML = "";
+  for(let id in dataWarga){
+    select.innerHTML += `<option value="${id}">${dataWarga[id].nama}</option>`;
+  }
+}
+
+function hitungTotalBayar(wargaId){
+  let total = 0;
+  for(let id in dataTransaksi){
+    if(dataTransaksi[id].wargaId === wargaId){
+      total += dataTransaksi[id].jumlah;
+    }
+  }
+  return total;
+}
+
+function renderTabel(){
+  const tbody = document.getElementById("tabelWarga");
+  tbody.innerHTML = "";
+  const mingguBerjalan = hitungMingguBerjalan();
+
+  for(let id in dataWarga){
+    const total = hitungTotalBayar(id);
+    const mingguBayar = Math.floor(total / IURAN_PER_MINGGU);
+    const selisih = mingguBayar - mingguBerjalan;
+
+    let status = "";
+    let kelas = "";
+
+    if(selisih === 0){
+      status = "Lunas";
+      kelas = "lunas";
+    } else if(selisih > 0){
+      status = "Lebih " + selisih + " minggu";
+      kelas = "lebih";
+    } else {
+      status = "Kurang " + Math.abs(selisih) + " minggu";
+      kelas = "kurang";
+    }
+
+    tbody.innerHTML += `
+      <tr>
+        <td>${dataWarga[id].nama}</td>
+        <td>Rp ${total}</td>
+        <td class="${kelas}">${status}</td>
+      </tr>
+    `;
+  }
+}
+
+document.getElementById("simpanBtn").addEventListener("click", ()=>{
+  const wargaId = document.getElementById("wargaSelect").value;
+  const jumlah = parseInt(document.getElementById("jumlahInput").value);
+
+  if(!jumlah) return;
+
+  push(transaksiRef, {
+    wargaId,
+    jumlah,
+    tanggal: new Date().toISOString()
+  });
+
+  document.getElementById("jumlahInput").value = "";
+});
+</script>
 
 </body>
 </html>
