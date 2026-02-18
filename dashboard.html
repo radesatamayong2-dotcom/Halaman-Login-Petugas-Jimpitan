@@ -1,33 +1,172 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Dashboard RT</title>
-  <link rel="stylesheet" href="style.css">
-</head>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
 <body>
 
-<div class="container">
-  <button onclick="logout()">Logout</button>
+<h2>Dashboard Petugas Jimpitan</h2>
 
-  <div class="card">
-    <h2>Input Iuran</h2>
-    <select id="wargaSelect"></select>
-    <input type="number" id="jumlahInput" placeholder="Jumlah (Rp)">
-    <button id="simpanBtn">Simpan</button>
-  </div>
-
-  <div class="card">
-    <h2>Status Warga</h2>
-    <table>
-      <thead>
-        <tr><th>Nama</th><th>Total Bayar</th><th>Status</th></tr>
-      </thead>
-      <tbody id="tabelWarga"></tbody>
-    </table>
-  </div>
+<!-- ================= INPUT SETORAN ================= -->
+<div class="card">
+    <h3>Input Setoran</h3>
+    <input type="date" id="tanggal">
+    <input type="text" id="nama" placeholder="Nama Warga">
+    <input type="number" id="jumlah" placeholder="Jumlah Setoran">
+    <button onclick="tambahData()">Tambah</button>
 </div>
 
-<script type="module" src="app.js"></script>
+<!-- ================= TOTAL ================= -->
+<div class="card">
+    <h3>Total Saldo</h3>
+    <h2 id="totalSaldo">Rp 0</h2>
+</div>
+
+<!-- ================= GRAFIK ================= -->
+<div class="card">
+    <h3>Grafik Setoran</h3>
+    <div style="width:100%; max-width:600px; margin:auto;">
+        <canvas id="grafik"></canvas>
+    </div>
+</div>
+
+<!-- ================= TABEL ================= -->
+<div class="card">
+    <h3>Riwayat Setoran</h3>
+    <table border="1" width="100%">
+        <thead>
+            <tr>
+                <th>Tanggal</th>
+                <th>Nama</th>
+                <th>Jumlah</th>
+                <th>Aksi</th>
+            </tr>
+        </thead>
+        <tbody id="tabelData"></tbody>
+    </table>
+</div>
+
+<!-- ================= EXPORT ================= -->
+<div class="card">
+    <button onclick="exportPDF()">Export PDF</button>
+</div>
+
+<script>
+
+let dataSetoran = JSON.parse(localStorage.getItem("dataSetoran")) || [];
+let chart;
+
+function simpanData() {
+    localStorage.setItem("dataSetoran", JSON.stringify(dataSetoran));
+}
+
+function formatRupiah(angka) {
+    return "Rp " + angka.toLocaleString("id-ID");
+}
+
+function tambahData() {
+    const tanggal = document.getElementById("tanggal").value;
+    const nama = document.getElementById("nama").value;
+    const jumlah = parseInt(document.getElementById("jumlah").value);
+
+    if (!tanggal || !nama || !jumlah) {
+        alert("Isi semua data!");
+        return;
+    }
+
+    dataSetoran.push({ tanggal, nama, jumlah });
+    simpanData();
+    tampilkanData();
+    updateGrafik();
+
+    document.getElementById("tanggal").value = "";
+    document.getElementById("nama").value = "";
+    document.getElementById("jumlah").value = "";
+}
+
+function hapusData(index) {
+    dataSetoran.splice(index, 1);
+    simpanData();
+    tampilkanData();
+    updateGrafik();
+}
+
+function tampilkanData() {
+    const tabel = document.getElementById("tabelData");
+    tabel.innerHTML = "";
+
+    let total = 0;
+
+    dataSetoran.forEach((item, index) => {
+        total += item.jumlah;
+        tabel.innerHTML += `
+            <tr>
+                <td>${item.tanggal}</td>
+                <td>${item.nama}</td>
+                <td>${formatRupiah(item.jumlah)}</td>
+                <td><button onclick="hapusData(${index})">Hapus</button></td>
+            </tr>
+        `;
+    });
+
+    document.getElementById("totalSaldo").innerText = formatRupiah(total);
+}
+
+function updateGrafik() {
+    const ctx = document.getElementById("grafik").getContext("2d");
+
+    if (chart) chart.destroy();
+
+    const labels = dataSetoran.map(item => item.nama);
+    const data = dataSetoran.map(item => item.jumlah);
+
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Jumlah Setoran',
+                data: data,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+async function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.text("Laporan Jimpitan", 14, 15);
+
+    let y = 25;
+    dataSetoran.forEach(item => {
+        doc.text(`${item.tanggal} - ${item.nama} - ${formatRupiah(item.jumlah)}`, 14, y);
+        y += 8;
+    });
+
+    // Capture grafik
+    const canvas = document.getElementById("grafik");
+    const imgData = canvas.toDataURL("image/png");
+
+    doc.addPage();
+    doc.text("Grafik Setoran", 14, 15);
+    doc.addImage(imgData, "PNG", 15, 25, 180, 90);
+
+    doc.save("laporan-jimpitan.pdf");
+}
+
+tampilkanData();
+updateGrafik();
+
+</script>
 
 </body>
-</html>
